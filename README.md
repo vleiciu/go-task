@@ -9,7 +9,7 @@
 
 **Command**
 ```bash
-cd /Users/vleiciu/Desktop/gotask
+cd .
 go run main.go
 ```
 
@@ -20,7 +20,7 @@ go run main.go
 
 **Command**
 ```bash
-cd /Users/vleiciu/Desktop/gotask
+cd .
 kotlinc -script pack.kts
 ```
 
