@@ -71,6 +71,155 @@ fun perm3(a: Int, b: Int, c: Int): List<Triple<Int, Int, Int>> = listOf(
 )
 
 // ----------------------------
+// Minimal JSON parser (no external dependencies)
+// ----------------------------
+
+private class JsonParser(private val s: String) {
+    private var i: Int = 0 // current cursor position
+
+    fun parse(): Any? {
+        skipWs()
+        val v = parseValue()
+        skipWs()
+        if (i != s.length) error("Trailing data at position $i")
+        return v
+    }
+
+    private fun parseValue(): Any? {
+        skipWs()
+        if (i >= s.length) error("Unexpected end of input")
+        return when (val ch = s[i]) {
+            '{' -> parseObject()
+            '[' -> parseArray()
+            '"' -> parseString()
+            't' -> { expect("true"); true }
+            'f' -> { expect("false"); false }
+            'n' -> { expect("null"); null }
+            '-', in '0'..'9' -> parseNumber()
+            else -> error("Unexpected character '$ch' at position $i")
+        }
+    }
+
+    private fun parseObject(): Map<String, Any?> {
+        expectChar('{')
+        skipWs()
+        val out = linkedMapOf<String, Any?>()
+        if (peekChar('}')) {
+            expectChar('}')
+            return out
+        }
+        while (true) {
+            skipWs()
+            val key = parseString()
+            skipWs()
+            expectChar(':')
+            val value = parseValue()
+            out[key] = value
+            skipWs()
+            if (peekChar('}')) {
+                expectChar('}')
+                return out
+            }
+            expectChar(',')
+        }
+    }
+
+    private fun parseArray(): List<Any?> {
+        expectChar('[')
+        skipWs()
+        val out = arrayListOf<Any?>()
+        if (peekChar(']')) {
+            expectChar(']')
+            return out
+        }
+        while (true) {
+            val value = parseValue()
+            out.add(value)
+            skipWs()
+            if (peekChar(']')) {
+                expectChar(']')
+                return out
+            }
+            expectChar(',')
+        }
+    }
+
+    private fun parseString(): String {
+        expectChar('"')
+        val sb = StringBuilder()
+        while (i < s.length) {
+            val ch = s[i++]
+            when (ch) {
+                '"' -> return sb.toString()
+                '\\' -> {
+                    if (i >= s.length) error("Unterminated escape at position $i")
+                    val esc = s[i++]
+                    when (esc) {
+                        '"', '\\', '/' -> sb.append(esc)
+                        'b' -> sb.append('\b')
+                        'f' -> sb.append('\u000C')
+                        'n' -> sb.append('\n')
+                        'r' -> sb.append('\r')
+                        't' -> sb.append('\t')
+                        'u' -> {
+                            if (i + 4 > s.length) error("Invalid unicode escape at position $i")
+                            val hex = s.substring(i, i + 4)
+                            i += 4
+                            sb.append(hex.toInt(16).toChar())
+                        }
+                        else -> error("Invalid escape '\\$esc' at position ${i - 1}")
+                    }
+                }
+                else -> sb.append(ch)
+            }
+        }
+        error("Unterminated string")
+    }
+
+    private fun parseNumber(): Double {
+        val start = i
+        if (s[i] == '-') i++
+        while (i < s.length && s[i].isDigit()) i++
+        if (i < s.length && s[i] == '.') {
+            i++
+            while (i < s.length && s[i].isDigit()) i++
+        }
+        if (i < s.length && (s[i] == 'e' || s[i] == 'E')) {
+            i++
+            if (i < s.length && (s[i] == '+' || s[i] == '-')) i++
+            while (i < s.length && s[i].isDigit()) i++
+        }
+        return s.substring(start, i).toDouble()
+    }
+
+    private fun skipWs() {
+        while (i < s.length && s[i].isWhitespace()) i++
+    }
+
+    private fun expectChar(c: Char) {
+        if (i >= s.length || s[i] != c) error("Expected '$c' at position $i")
+        i++
+    }
+
+    private fun peekChar(c: Char): Boolean = i < s.length && s[i] == c
+
+    private fun expect(word: String) {
+        if (!s.regionMatches(i, word, 0, word.length)) error("Expected '$word' at position $i")
+        i += word.length
+    }
+}
+
+private fun Any?.asObj(): Map<String, Any?> = this as? Map<String, Any?> ?: error("Expected object")
+private fun Any?.asArr(): List<Any?> = this as? List<Any?> ?: error("Expected array")
+private fun Any?.asStr(): String = this as? String ?: error("Expected string")
+private fun Any?.asNum(): Double = when (this) {
+    is Double -> this
+    is Int -> this.toDouble()
+    is Long -> this.toDouble()
+    else -> error("Expected number")
+}
+
+// ----------------------------
 // AllOrientations
 // ----------------------------
 
@@ -342,68 +491,50 @@ fun packUntilDoneAdaptive(containers: List<Container>, items: List<ItemType>): P
 }
 
 // ----------------------------
-// Demo input / output (test cases)
+// Demo input / output (test cases loaded from JSON)
 // ----------------------------
-
-val containers = listOf(
-    Container(name = "40ft", dim = Box(w = cmToMm(234.8), h = cmToMm(238.44), l = cmToMm(1203.1))), // container option #1
-    Container(name = "10ft", dim = Box(w = cmToMm(234.8), h = cmToMm(238.44), l = cmToMm(279.4)))   // container option #2
-)
 
 data class TestCase(
     val name: String,         // test case name (printed in output)
     val items: List<ItemType> // list of item types for this test case
 )
 
-val testCases = listOf(
-    TestCase(
-        name = "Case 1: single item type (27 rectangular boxes)",
-        items = listOf(
-            ItemType(
-                name = "RectangleBox",
-                count = 27,
-                dim = Box(
-                    w = cmToMm(78.0), // item width in mm
-                    h = cmToMm(79.0), // item height in mm
-                    l = cmToMm(93.0)  // item length in mm
-                )
-            )
-        )
-    ),
-    TestCase(
-        name = "Case 2: mixed items (balls + packages)",
-        items = listOf(
-            ItemType(name = "ball_R40(cube80)", count = 50, dim = Box(w = cmToMm(80.0), h = cmToMm(80.0), l = cmToMm(80.0))),
-            ItemType(name = "pkg_80_100_200", count = 56, dim = Box(w = cmToMm(80.0), h = cmToMm(100.0), l = cmToMm(200.0))),
-            ItemType(name = "pkg_60_80_150", count = 48, dim = Box(w = cmToMm(60.0), h = cmToMm(80.0), l = cmToMm(150.0)))
-        )
-    ),
-    TestCase(
-        name = "Case 3: tiny remainder (2 boxes + 1 small box)",
-        items = listOf(
-            ItemType(name = "BigBox", count = 2, dim = Box(w = cmToMm(200.0), h = cmToMm(100.0), l = cmToMm(200.0))),
-            ItemType(name = "SmallBox", count = 1, dim = Box(w = cmToMm(50.0), h = cmToMm(50.0), l = cmToMm(50.0)))
-        )
-    ),
-    TestCase(
-        name = "Case 4: oversize item (should not fit in any orientation)",
-        items = listOf(
-            // One dimension is longer than the longest container length (40ft is ~1203.1cm),
-            // so this item should not fit in any container in any orientation.
-            ItemType(name = "TooLong", count = 1, dim = Box(w = cmToMm(1300.0), h = cmToMm(10.0), l = cmToMm(10.0)))
-        )
-    ),
-    TestCase(
-        name = "Case 5: both containers used (40ft then 10ft)",
-        items = listOf(
-            // For a 80cm cube:
-            // - 40ft fits: floor(234.8/80)*floor(238.44/80)*floor(1203.1/80) = 2*2*15 = 60
-            // - 10ft fits: floor(234.8/80)*floor(238.44/80)*floor(279.4/80)  = 2*2*3  = 12
-            // With 61 cubes: first container will be 40ft (places 60), remaining 1 fits in 10ft.
-            ItemType(name = "Cube80", count = 61, dim = Box(w = cmToMm(80.0), h = cmToMm(80.0), l = cmToMm(80.0)))
+val inputPath = if (args.isNotEmpty()) args[0] else "testcases.json" // JSON file path (default: repo file)
+val rawJson = java.io.File(inputPath).readText() // read JSON content from disk
+val root = JsonParser(rawJson).parse().asObj()   // parse JSON into a generic object tree
+
+val containers = root["containers"].asArr().map { cAny ->
+    val c = cAny.asObj()
+    val name = c["name"].asStr()
+    val dim = c["dimCm"].asObj()
+    Container(
+        name = name,
+        dim = Box(
+            w = cmToMm(dim["w"].asNum()),
+            h = cmToMm(dim["h"].asNum()),
+            l = cmToMm(dim["l"].asNum())
         )
     )
-)
+}
+
+val testCases = root["cases"].asArr().map { tcAny ->
+    val tc = tcAny.asObj()
+    val name = tc["name"].asStr()
+    val items = tc["items"].asArr().map { itAny ->
+        val it = itAny.asObj()
+        val dim = it["dimCm"].asObj()
+        ItemType(
+            name = it["name"].asStr(),
+            count = it["count"].asNum().toInt(),
+            dim = Box(
+                w = cmToMm(dim["w"].asNum()),
+                h = cmToMm(dim["h"].asNum()),
+                l = cmToMm(dim["l"].asNum())
+            )
+        )
+    }
+    TestCase(name = name, items = items)
+}
 
 for (tc in testCases) {
     println("\n=== ${tc.name} ===")

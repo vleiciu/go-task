@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
 	"math"
+	"os"
 )
 
 type Box struct{ W, H, L int } // mm
@@ -33,6 +36,80 @@ type Placement struct {
 }
 
 func cmToMm(x float64) int { return int(math.Round(x * 10)) } // cm -> mm (rounded)
+
+// ----------------------------
+// JSON input model (centimeters in file, converted to millimeters in code)
+// ----------------------------
+
+type dimCm struct {
+	W float64 `json:"w"` // centimeters
+	H float64 `json:"h"` // centimeters
+	L float64 `json:"l"` // centimeters
+}
+
+type containerJSON struct {
+	Name  string `json:"name"`
+	DimCm dimCm  `json:"dimCm"`
+}
+
+type itemJSON struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+	DimCm dimCm  `json:"dimCm"`
+}
+
+type testCaseJSON struct {
+	Name  string     `json:"name"`
+	Items []itemJSON `json:"items"`
+}
+
+type inputJSON struct {
+	Containers []containerJSON `json:"containers"`
+	Cases      []testCaseJSON  `json:"cases"`
+}
+
+func loadInputJSON(path string) (inputJSON, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return inputJSON{}, err
+	}
+	var in inputJSON
+	if err := json.Unmarshal(b, &in); err != nil {
+		return inputJSON{}, err
+	}
+	return in, nil
+}
+
+func toContainers(in []containerJSON) []Container {
+	out := make([]Container, 0, len(in))
+	for _, c := range in {
+		out = append(out, Container{
+			Name: c.Name,
+			Dim: Box{
+				W: cmToMm(c.DimCm.W),
+				H: cmToMm(c.DimCm.H),
+				L: cmToMm(c.DimCm.L),
+			},
+		})
+	}
+	return out
+}
+
+func toItemTypes(in []itemJSON) []ItemType {
+	out := make([]ItemType, 0, len(in))
+	for _, it := range in {
+		out = append(out, ItemType{
+			Name:  it.Name,
+			Count: it.Count,
+			Dim: Box{
+				W: cmToMm(it.DimCm.W),
+				H: cmToMm(it.DimCm.H),
+				L: cmToMm(it.DimCm.L),
+			},
+		})
+	}
+	return out
+}
 
 func perm3(a, b, c int) [][3]int {
 	return [][3]int{
@@ -384,66 +461,27 @@ func PackUntilDoneAdaptive(containers []Container, items []ItemType) PackSummary
 }
 
 func main() {
-	containers := []Container{ // available container types to choose from
-		{Name: "40ft", Dim: Box{W: cmToMm(234.8), H: cmToMm(238.44), L: cmToMm(1203.1)}}, // container option #1
-		{Name: "10ft", Dim: Box{W: cmToMm(234.8), H: cmToMm(238.44), L: cmToMm(279.4)}},  // container option #2
+	inputPath := flag.String("input", "testcases.json", "Path to JSON file with containers and test cases")
+	caseName := flag.String("case", "", "Optional: run only a single case by exact name (matches JSON 'name')")
+	flag.Parse()
+
+	in, err := loadInputJSON(*inputPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read input JSON %q: %v\n", *inputPath, err)
+		os.Exit(1)
 	}
 
-	type TestCase struct {
-		Name  string     // test case name (printed in output)
-		Items []ItemType // list of item types for this test case
-	}
+	containers := toContainers(in.Containers) // available container types to choose from
 
-	testCases := []TestCase{
-		{
-			Name: "Case 1: single item type (27 rectangular boxes)",
-			Items: []ItemType{
-				{Name: "RectangleBox", Count: 27, Dim: Box{
-					W: cmToMm(78), // item width in mm
-					H: cmToMm(79), // item height in mm
-					L: cmToMm(93), // item length in mm
-				}},
-			},
-		},
-		{
-			Name: "Case 2: mixed items (balls + packages)",
-			Items: []ItemType{
-				{Name: "ball_R40(cube80)", Count: 50, Dim: Box{W: cmToMm(80), H: cmToMm(80), L: cmToMm(80)}},
-				{Name: "pkg_80_100_200", Count: 56, Dim: Box{W: cmToMm(80), H: cmToMm(100), L: cmToMm(200)}},
-				{Name: "pkg_60_80_150", Count: 48, Dim: Box{W: cmToMm(60), H: cmToMm(80), L: cmToMm(150)}},
-			},
-		},
-		{
-			Name: "Case 3: tiny remainder (2 boxes + 1 small box)",
-			Items: []ItemType{
-				{Name: "BigBox", Count: 2, Dim: Box{W: cmToMm(200), H: cmToMm(100), L: cmToMm(200)}},
-				{Name: "SmallBox", Count: 1, Dim: Box{W: cmToMm(50), H: cmToMm(50), L: cmToMm(50)}},
-			},
-		},
-		{
-			Name: "Case 4: oversize item (should not fit in any orientation)",
-			Items: []ItemType{
-				// One dimension is longer than the longest container length (40ft is ~1203.1cm),
-				// so this item should not fit in any container in any orientation.
-				{Name: "TooLong", Count: 1, Dim: Box{W: cmToMm(1300), H: cmToMm(10), L: cmToMm(10)}},
-			},
-		},
-		{
-			Name: "Case 5: both containers used (40ft then 10ft)",
-			Items: []ItemType{
-				// For a 80cm cube:
-				// - 40ft fits: floor(234.8/80)*floor(238.44/80)*floor(1203.1/80) = 2*2*15 = 60
-				// - 10ft fits: floor(234.8/80)*floor(238.44/80)*floor(279.4/80)  = 2*2*3  = 12
-				// With 61 cubes: first container will be 40ft (places 60), remaining 1 fits in 10ft.
-				{Name: "Cube80", Count: 61, Dim: Box{W: cmToMm(80), H: cmToMm(80), L: cmToMm(80)}},
-			},
-		},
-	}
+	for _, tc := range in.Cases { // run all test cases (or one filtered case)
+		if *caseName != "" && tc.Name != *caseName {
+			continue
+		}
 
-	for _, tc := range testCases { // run all test cases
 		fmt.Printf("\n=== %s ===\n", tc.Name)
 
-		s := PackUntilDoneAdaptive(containers, tc.Items)             // run adaptive packing until all Counts reach 0 (or get stuck)
+		items := toItemTypes(tc.Items)                               // items for this test case
+		s := PackUntilDoneAdaptive(containers, items)                // run adaptive packing until all Counts reach 0 (or get stuck)
 		fmt.Printf("Total containers used: %d\n", s.TotalContainers) // overall containers count
 		fmt.Printf("Breakdown:\n")
 		for _, c := range containers { // print breakdown in the same order as input
@@ -452,7 +490,7 @@ func main() {
 			}
 		}
 
-		// debug only, when none container can fit any of the boxes
+		// Debug only, when none container can fit any of the boxes.
 		if !allPlaced(s.Remaining) { // if packing could not complete, print remaining (unplaced) counts
 			fmt.Printf("Unplaced (could not fit):\n")
 			for _, it := range s.Remaining { // list only types with remaining Count

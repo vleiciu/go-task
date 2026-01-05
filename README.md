@@ -13,6 +13,12 @@ cd .
 go run main.go
 ```
 
+**Use JSON test cases**
+```bash
+cd .
+go run main.go -input testcases.json
+```
+
 ### Run Kotlin script (`pack.kts`)
 
 **Requirements**
@@ -21,7 +27,7 @@ go run main.go
 **Command**
 ```bash
 cd .
-kotlinc -script pack.kts
+kotlinc -script pack.kts -- testcases.json
 ```
 
 ## What was implemented
@@ -47,6 +53,10 @@ This repo contains a simplified packing simulation that estimates how many conta
   - At each step it chooses the next container type with `chooseNextContainer(...)`:
     - If the entire remaining set fits into a single container of some type, it picks the **smallest** such container.
     - Otherwise it picks the container that places the **most items** in one container (tie-break: smaller container volume).
+
+- **Test cases moved to JSON**
+  - `testcases.json` contains both the container list and the test case list.
+  - Units in JSON are **centimeters** (`dimCm`), converted to **millimeters** in code.
 
 ### Notes / limitations
 

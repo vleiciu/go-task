@@ -1,0 +1,43 @@
+{
+  "containers": [
+    { "name": "40ft", "dimCm": { "w": 234.8, "h": 238.44, "l": 1203.1 } },
+    { "name": "10ft", "dimCm": { "w": 234.8, "h": 238.44, "l": 279.4 } }
+  ],
+  "cases": [
+    {
+      "name": "Case 1: single item type (27 rectangular boxes)",
+      "items": [
+        { "name": "RectangleBox", "count": 27, "dimCm": { "w": 78, "h": 79, "l": 93 } }
+      ]
+    },
+    {
+      "name": "Case 2: mixed items (balls + packages)",
+      "items": [
+        { "name": "ball_R40(cube80)", "count": 50, "dimCm": { "w": 80, "h": 80, "l": 80 } },
+        { "name": "pkg_80_100_200", "count": 56, "dimCm": { "w": 80, "h": 100, "l": 200 } },
+        { "name": "pkg_60_80_150", "count": 48, "dimCm": { "w": 60, "h": 80, "l": 150 } }
+      ]
+    },
+    {
+      "name": "Case 3: tiny remainder (2 boxes + 1 small box)",
+      "items": [
+        { "name": "BigBox", "count": 2, "dimCm": { "w": 200, "h": 100, "l": 200 } },
+        { "name": "SmallBox", "count": 1, "dimCm": { "w": 50, "h": 50, "l": 50 } }
+      ]
+    },
+    {
+      "name": "Case 4: oversize item (should not fit in any orientation)",
+      "items": [
+        { "name": "TooLong", "count": 1, "dimCm": { "w": 1300, "h": 10, "l": 10 } }
+      ]
+    },
+    {
+      "name": "Case 5: both containers used (40ft then 10ft)",
+      "items": [
+        { "name": "Cube80", "count": 61, "dimCm": { "w": 80, "h": 80, "l": 80 } }
+      ]
+    }
+  ]
+}
+
+
